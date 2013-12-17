@@ -104,7 +104,8 @@ $.getResource = (domain, url, downloadIfNotInCache) ->
         contentCollection.get resource.content_ref
     go (content) ->
       if content?
-        return {content: content.content, content_type: content.content_type}
+        content.content = convertToContentType(content.content_type, content.content)
+        return {content_type: content.content_type, content: content.content}
       if !downloadIfNotInCache
         return {content: null, content_type: null}
 
@@ -115,8 +116,9 @@ $.getResource = (domain, url, downloadIfNotInCache) ->
               _events.emit "success", result
         go ({content_type, content}) ->
           if content?
-            contentDigest = crypto.createHash("md5").update(content).digest("hex")
-            contentCollection.put contentDigest, {content_type, content}
+            base64Content = convertToBase64(content_type, content)
+            contentDigest = crypto.createHash("md5").update(base64Content).digest("hex")
+            contentCollection.put contentDigest, {content_type, content: base64Content}
             collection.put urlDigest, {url, content_ref: contentDigest}
           return {content_type, content}
 
@@ -134,6 +136,7 @@ $.putResource = (domain, url, content_type, content) ->
       collection = _collection
       contentCollection = _contentCollection
     go ->
+      content = convertToBase64(content_type, content)
       contentDigest = crypto.createHash("md5").update(content).digest("hex")
       contentCollection.put contentDigest, {content_type, content}
     go ->
@@ -168,5 +171,17 @@ downloadResource = (url, attempt, callback) ->
 
 mapDomainToType = (domain) ->
   domain.replace(/\./g, "_")
+
+convertToContentType = (content_type, content) ->
+  if content_type.indexOf("charset=utf-8") >= 0
+    content = new Buffer(content, "base64")
+    content = content.toString("utf8")
+  content
+
+convertToBase64 = (content_type, content) ->
+  if content_type.indexOf("charset=utf-8") >= 0
+    content = new Buffer(content, "utf8")
+    content = content.toString("base64")
+  content
 
 module.exports = $
