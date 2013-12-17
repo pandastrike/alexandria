@@ -1,5 +1,5 @@
 {
-  "name": "crawler-cache",
+  "name": "alexandria",
   "version": "0.0.1",
   "description": "A storage interface to store crawled content in Elasticsearch",
   "main": "src/index.coffee",
