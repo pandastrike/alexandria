@@ -86,6 +86,18 @@ $.deleteStore = (domain) ->
             _events.callback err, data
         )
 
+$.getAllResourceUrls = (domain) ->
+  type = mapDomainToType(domain)
+  do events.serially (go) ->
+    go -> adapter.collection indexName, type
+    go (collection) ->
+      collection.all
+    go (results) ->
+      if results?.length > 0
+        resourceUrls = results.map (result) -> result.url
+      else
+        resourceUrls = []
+
 $.getResource = (domain, url, downloadIfNotInCache) ->
   type = mapDomainToType(domain)
   collection = contentCollection = null
