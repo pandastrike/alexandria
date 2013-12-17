@@ -30,5 +30,5 @@ All methods in alexandria return an `EventChannel`:
 * Index where resources are stored can be configured via `options` passed to `initialize`
 
 * For every domain whose resources are stored, two type mappings are created
-** one type to store content type and the actual content in base64 encoding, id of the document will be md5 digest of the content and another type to store url and id of the document that contains the actual content
-** first type is named `<domain name with . replaced by _>` and second type is named `<domain name with . replaced by _>__content__`, example: a domain such as `example.com` would be  types would be named `example_com` and `example_com__content__`
+  * one type to store content type and the actual content in base64 encoding, id of the document will be md5 digest of the content and another type to store url and id of the document that contains the actual content
+  * first type is named `<domain name with . replaced by _>` and second type is named `<domain name with . replaced by _>__content__`, example: a domain such as `example.com` would be  types would be named `example_com` and `example_com__content__`
