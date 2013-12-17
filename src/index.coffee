@@ -27,7 +27,8 @@ $.initialize = (options) ->
       adapter = _adapter
       _events.emit "success"
 
-$.createStore = (type) ->
+$.createStore = (domain) ->
+  type = mapDomainToType(domain)
   do events.serially (go) ->
     go ->
       events.source (_events) ->
@@ -38,10 +39,10 @@ $.createStore = (type) ->
         )
     go ->
       mapping = {}
-      mapping["#{type}"] = 
+      mapping[type] = 
         properties:
           url: type: "string"
-          content_link: type: "string", index: "not_analyzed"
+          content_ref: type: "string", index: "not_analyzed"
       events.source (_events) ->
         adapter.client.putMapping(
           indexName
@@ -65,13 +66,14 @@ $.createStore = (type) ->
             _events.callback err, data
         )
 
-$.deleteStore = (type) ->
+$.deleteStore = (domain) ->
+  type = mapDomainToType(domain)
   do events.serially (go) ->
     go ->
       events.source (_events) ->
         adapter.client.deleteMapping(
           indexName
-          "#{type}"
+          type
           (err, data) -> 
             _events.callback err, data
         )
@@ -84,7 +86,8 @@ $.deleteStore = (type) ->
             _events.callback err, data
         )
 
-$.getResource = (type, url, downloadIfNotInCache) ->
+$.getResource = (domain, url, downloadIfNotInCache) ->
+  type = mapDomainToType(domain)
   collection = contentCollection = null
   urlDigest = crypto.createHash("md5").update(url).digest("hex")
   do events.serially (go) ->
@@ -96,11 +99,9 @@ $.getResource = (type, url, downloadIfNotInCache) ->
       collection = _collection
       contentCollection = _contentCollection
       collection.get urlDigest
-    go (results) ->
-      if results?.length == 1
-        contentCollection.get results[0].content_link
-      else
-        null
+    go (resource) ->
+      if resource?
+        contentCollection.get resource.content_ref
     go (content) ->
       if content?
         return {content: content.content, content_type: content.content_type}
@@ -116,10 +117,11 @@ $.getResource = (type, url, downloadIfNotInCache) ->
           if content?
             contentDigest = crypto.createHash("md5").update(content).digest("hex")
             contentCollection.put contentDigest, {content_type, content}
-            collection.put urlDigest, {url, content_link: contentDigest}
+            collection.put urlDigest, {url, content_ref: contentDigest}
           return {content_type, content}
 
-$.putResource = (type, url, content_type, content) ->
+$.putResource = (domain, url, content_type, content) ->
+  type = mapDomainToType(domain)
   contentDigest = null
   collection = null
   contentCollection = null
@@ -136,7 +138,7 @@ $.putResource = (type, url, content_type, content) ->
       contentCollection.put contentDigest, {content_type, content}
     go ->
       urlDigest = crypto.createHash("md5").update(url).digest("hex")
-      collection.put urlDigest, {url, content_link: contentDigest}
+      collection.put urlDigest, {url, content_ref: contentDigest}
 
 downloadResource = (url, attempt, callback) ->
   req = request {uri: url, maxRedirects: 3}
@@ -163,5 +165,8 @@ downloadResource = (url, attempt, callback) ->
       downloadResource(url, attempt + 1, callback)
     else
       callback({content_type: null, content: null})
+
+mapDomainToType = (domain) ->
+  domain.replace(/\./g, "_")
 
 module.exports = $
