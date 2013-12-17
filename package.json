@@ -1,0 +1,11 @@
+{
+  "name": "crawler-cache",
+  "version": "0.0.1",
+  "description": "A storage interface to store crawled content in Elasticsearch",
+  "main": "src/index.coffee",
+  "dependencies": {
+    "fairmont": "0.4.x",
+    "mutual": "0.4.x",
+    "pirate": "~0.9.2"
+  }
+}
