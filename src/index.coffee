@@ -40,6 +40,7 @@ $.createStore = (type) ->
       mapping = {}
       mapping["#{type}"] = 
         properties:
+          url: type: "string"
           content_link: type: "string", index: "not_analyzed"
       events.source (_events) ->
         adapter.client.putMapping(
@@ -85,18 +86,19 @@ $.deleteStore = (type) ->
 
 $.getResource = (type, url, downloadIfNotInCache) ->
   collection = contentCollection = null
-  do adapter.events.serially (go) ->
+  urlDigest = crypto.createHash("md5").update(url).digest("hex")
+  do events.serially (go) ->
     go ->
-      do adapter.events.concurrently (go) ->
-        go "_collection", -> adapter.collection indexName, "#{type}"
+      do events.concurrently (go) ->
+        go "_collection", -> adapter.collection indexName, type
         go "_contentCollection", -> adapter.collection indexName, "#{type}__content__"
     go ({_collection, _contentCollection}) ->
       collection = _collection
       contentCollection = _contentCollection
-      collection.get url
+      collection.get urlDigest
     go (results) ->
       if results?.length == 1
-        contentCollection.get results[0].conent_link
+        contentCollection.get results[0].content_link
       else
         null
     go (content) ->
@@ -114,18 +116,18 @@ $.getResource = (type, url, downloadIfNotInCache) ->
           if content?
             contentDigest = crypto.createHash("md5").update(content).digest("hex")
             contentCollection.put contentDigest, {content_type, content}
-            collection.put url, {content_link: contentDigest}
+            collection.put urlDigest, {url, content_link: contentDigest}
           return {content_type, content}
 
 $.putResource = (type, url, content_type, content) ->
   contentDigest = null
   collection = null
   contentCollection = null
-  do adapter.events.serially (go) ->
-    go -> 
-      do adapter.events.concurrently (go) ->
-        go "_collection", -> adapter.collection(indexName, type)
-        go "_contentCollection",-> adapter.collection(indexName, "#{type}__content__")
+  do events.serially (go) ->
+    go ->
+      do events.concurrently (go) ->
+        go "_collection", -> adapter.collection indexName, type
+        go "_contentCollection", -> adapter.collection indexName, "#{type}__content__"
     go ({_collection, _contentCollection}) ->
       collection = _collection
       contentCollection = _contentCollection
@@ -133,7 +135,8 @@ $.putResource = (type, url, content_type, content) ->
       contentDigest = crypto.createHash("md5").update(content).digest("hex")
       contentCollection.put contentDigest, {content_type, content}
     go ->
-      collection.put url, {content_link: contentDigest}
+      urlDigest = crypto.createHash("md5").update(url).digest("hex")
+      collection.put urlDigest, {url, content_link: contentDigest}
 
 downloadResource = (url, attempt, callback) ->
   req = request {uri: url, maxRedirects: 3}
