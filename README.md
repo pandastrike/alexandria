@@ -32,4 +32,4 @@ All methods in alexandria return an `EventChannel`:
 * For every domain whose resources are stored, two type mappings are created
   * one type to store content type and the actual content in base64 encoding (id of documents of this type will be md5 digest of the content)
   * another type to store url of the resource and a reference to the document that contains the actual content (id of documents of this type will be md5 digest of the url)
-  * first type is named `<domain name with . replaced by _>` and second type is named `<domain name with . replaced by _>__content__`, example: a domain such as `example.com` would have two types named `example_com` and `example_com__content__`
+  * the two types are named `<domain name with . replaced by _>__content__` and second type is named `<domain name with . replaced by _>`, example: a domain such as `example.com` would have the two types named `example_com__content__` and `example_com`.
