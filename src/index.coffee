@@ -165,14 +165,15 @@ downloadResource = (url, attempt, callback) ->
     else if res.statusCode >= 300 and res.statusCode < 400
       downloadResource(res.headers.location, attempt, callback)
     else
-      encoding = res.headers["content-encoding"].toLowerCase()
+      encoding = res.headers["content-encoding"]
+      encoding = encoding.toLowerCase() if encoding?
       content_type = res.headers["content-type"].toLowerCase()
       stream = res
       content = ""
       if encoding == "gzip"
         stream = res.pipe(zlib.createGunzip())
       else if (encoding == "deflate")
-        res.pipe(zlib.createInflate())
+        stream = res.pipe(zlib.createInflate())
       stream.on "data", (data) ->
         content += data.toString("base64")
       stream.on "end", ->
