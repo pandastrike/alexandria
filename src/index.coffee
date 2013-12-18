@@ -1,7 +1,7 @@
 {ElasticSearch} = require "pirate"
 {EventChannel} = require "mutual"
 crypto = require "crypto"
-{merge, md5, base64} = require "fairmont"
+{merge, md5} = require "fairmont"
 request = require("request")
 zlib = require("zlib")
 
@@ -53,14 +53,14 @@ $.createStore = (domain) ->
         )
     go ->
       mapping = {}
-      mapping["#{type}__content__"] = 
+      mapping["#{type}_content"] = 
         properties:
           content_type: type: "string", index: "no"
           content: type: "binary"
       events.source (_events) ->
         adapter.client.putMapping(
           indexName
-          "#{type}__content__"
+          "#{type}_content"
           mapping
           (err, data) -> 
             _events.callback err, data
@@ -81,7 +81,7 @@ $.deleteStore = (domain) ->
       events.source (_events) ->
         adapter.client.deleteMapping(
           indexName
-          "#{type}__content__"
+          "#{type}_content"
           (err, data) -> 
             _events.callback err, data
         )
@@ -107,7 +107,7 @@ $.getResource = (domain, url, downloadIfNotInCache) ->
     go ->
       do events.concurrently (go) ->
         go "_collection", -> adapter.collection indexName, type
-        go "_contentCollection", -> adapter.collection indexName, "#{type}__content__"
+        go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
     go ({_collection, _contentCollection}) ->
       collection = _collection
       contentCollection = _contentCollection
@@ -117,25 +117,30 @@ $.getResource = (domain, url, downloadIfNotInCache) ->
         contentCollection.get resource.content_ref
     go (content) ->
       if content?
-        content.content = convertToContentType(content.content_type, content.content)
-        return {content_type: content.content_type, content: content.content}
+        if $.isTextContent(content.content_type)
+          return {contentType: content.content_type, content: content.text_content}
+        else
+          return {contentType: content.content_type, content: content.binary_content}
+        
       if !downloadIfNotInCache
-        return {content: null, content_type: null}
+        return {contentType: null, content: null}
 
       do events.serially (go) ->
         go -> 
           events.source (_events) ->
-            downloadResource url, 1, (result) ->
+            $.downloadResource url, 1, (result) ->
               _events.emit "success", result
-        go ({content_type, content}) ->
+        go ({contentType, content}) ->
           if content?
-            base64Content = convertToBase64(content_type, content)
-            contentDigest = crypto.createHash("md5").update(base64Content, "base64").digest("hex")
-            contentCollection.put contentDigest, {content_type, content: base64Content}
+            contentDigest = md5(content)
+            if $.isTextContent(contentType)
+              contentCollection.put(contentDigest, {content_type: contentType, text_content: content})
+            else
+              contentCollection.put(contentDigest, {content_type: contentType, binary_content: content})
             collection.put urlDigest, {url, content_ref: contentDigest}
-          return {content_type, content}
+          return {contentType, content}
 
-$.putResource = (domain, url, content_type, content) ->
+$.putResource = (domain, url, contentType, content) ->
   type = mapDomainToType(domain)
   url = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
   contentDigest = null
@@ -145,58 +150,59 @@ $.putResource = (domain, url, content_type, content) ->
     go ->
       do events.concurrently (go) ->
         go "_collection", -> adapter.collection indexName, type
-        go "_contentCollection", -> adapter.collection indexName, "#{type}__content__"
+        go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
     go ({_collection, _contentCollection}) ->
       collection = _collection
       contentCollection = _contentCollection
     go ->
-      content = convertToBase64(content_type, content)
-      contentDigest = crypto.createHash("md5").update(content, "base64").digest("hex")
-      contentCollection.put contentDigest, {content_type, content}
+      contentDigest = md5(content)
+      if $.isTextContent(contentType)
+        contentCollection.put(contentDigest, {content_type: contentType, text_content: content})
+      else
+        contentCollection.put(contentDigest, {content_type: contentType, binary_content: content})
     go ->
       urlDigest = md5(url)
       collection.put urlDigest, {url, content_ref: contentDigest}
 
-downloadResource = (url, attempt, callback) ->
-  req = request {uri: url, maxRedirects: 3}
+$.downloadResource = (url, attempt, callback) ->
+  req = request {uri: url, maxRedirects: maxRedirectsForDownload}
   req.on "response", (res) ->
     if res.statusCode >= 400
-      callback({content_type: null, content: null})
+      callback({contentType: null, content: null, statusCode: res.statusCode})
     else if res.statusCode >= 300 and res.statusCode < 400
-      downloadResource(res.headers.location, attempt, callback)
+      $.downloadResource(res.headers.location, attempt, callback)
     else
       encoding = res.headers["content-encoding"]
       encoding = encoding.toLowerCase() if encoding?
-      content_type = res.headers["content-type"].toLowerCase()
-      stream = res
+      res.setEncoding("binary")
+      contentType = res.headers["content-type"].toLowerCase()
       content = ""
+      stream = res
       if encoding == "gzip"
         stream = res.pipe(zlib.createGunzip())
-      else if (encoding == "deflate")
+      else if encoding == "deflate"
         stream = res.pipe(zlib.createInflate())
-      stream.on "data", (data) ->
-        content += data.toString("base64")
+      stream.on "data", (chunk) ->
+        content += chunk
       stream.on "end", ->
-        callback({content_type, content})
+        content = new Buffer(content, "binary")
+        if $.isTextContent(contentType)
+          content = content.toString()
+        else
+          content = content.toString("base64")
+        callback({contentType, content, statusCode: res.statusCode})
+      stream.on "error", (err) ->
+        callback({contentType: null, content: null, statusCode: res.statusCode})
   req.on "error", (err) ->
     if attempt <= maxAttemptsOnDownloadError
-      downloadResource(url, attempt + 1, callback)
+      $.downloadResource(url, attempt + 1, callback)
     else
-      callback({content_type: null, content: null})
+      callback({contentType: null, content: null, statusCode: res.statusCode})
+
+$.isTextContent = (contentType) ->
+  return contentType.indexOf("text/") == 0 or contentType.indexOf("application/javascript") == 0
 
 mapDomainToType = (domain) ->
   domain.replace(/\./g, "_")
-
-convertToContentType = (content_type, content) ->
-  if content_type.indexOf("charset=utf-8") >= 0
-    content = new Buffer(content, "base64")
-    content = content.toString("utf8")
-  content
-
-convertToBase64 = (content_type, content) ->
-  if content_type.indexOf("charset=utf-8") >= 0
-    content = new Buffer(content, "utf8")
-    content = content.toString("base64")
-  content
 
 module.exports = $
