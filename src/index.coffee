@@ -91,7 +91,7 @@ $.getAllResourceUrls = (domain) ->
   do events.serially (go) ->
     go -> adapter.collection indexName, type
     go (collection) ->
-      collection.all
+      collection.all()
     go (results) ->
       if results?.length > 0
         resourceUrls = results.map (result) -> result.url
