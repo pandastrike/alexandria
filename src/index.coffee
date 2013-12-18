@@ -1,7 +1,7 @@
 {ElasticSearch} = require "pirate"
 {EventChannel} = require "mutual"
 crypto = require "crypto"
-{merge} = require "fairmont"
+{merge, md5, base64} = require "fairmont"
 request = require("request")
 zlib = require("zlib")
 
@@ -101,7 +101,7 @@ $.getAllResourceUrls = (domain) ->
 $.getResource = (domain, url, downloadIfNotInCache) ->
   type = mapDomainToType(domain)
   collection = contentCollection = null
-  urlDigest = crypto.createHash("md5").update(url).digest("hex")
+  urlDigest = md5(url)
   do events.serially (go) ->
     go ->
       do events.concurrently (go) ->
@@ -129,7 +129,7 @@ $.getResource = (domain, url, downloadIfNotInCache) ->
         go ({content_type, content}) ->
           if content?
             base64Content = convertToBase64(content_type, content)
-            contentDigest = crypto.createHash("md5").update(base64Content).digest("hex")
+            contentDigest = crypto.createHash("md5").update(base64Content, "base64").digest("hex")
             contentCollection.put contentDigest, {content_type, content: base64Content}
             collection.put urlDigest, {url, content_ref: contentDigest}
           return {content_type, content}
@@ -149,10 +149,10 @@ $.putResource = (domain, url, content_type, content) ->
       contentCollection = _contentCollection
     go ->
       content = convertToBase64(content_type, content)
-      contentDigest = crypto.createHash("md5").update(content).digest("hex")
+      contentDigest = crypto.createHash("md5").update(content, "base64").digest("hex")
       contentCollection.put contentDigest, {content_type, content}
     go ->
-      urlDigest = crypto.createHash("md5").update(url).digest("hex")
+      urlDigest = md5(url)
       collection.put urlDigest, {url, content_ref: contentDigest}
 
 downloadResource = (url, attempt, callback) ->
@@ -163,8 +163,8 @@ downloadResource = (url, attempt, callback) ->
     else if res.statusCode >= 300 and res.statusCode < 400
       downloadResource(res.headers.location, attempt, callback)
     else
-      encoding = res.headers["content-encoding"]
-      content_type = res.headers["content-type"]
+      encoding = res.headers["content-encoding"].toLowerCase()
+      content_type = res.headers["content-type"].toLowerCase()
       stream = res
       content = ""
       if encoding == "gzip"
