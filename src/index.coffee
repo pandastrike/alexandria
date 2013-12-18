@@ -100,6 +100,7 @@ $.getAllResourceUrls = (domain) ->
 
 $.getResource = (domain, url, downloadIfNotInCache) ->
   type = mapDomainToType(domain)
+  url = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
   collection = contentCollection = null
   urlDigest = md5(url)
   do events.serially (go) ->
@@ -136,6 +137,7 @@ $.getResource = (domain, url, downloadIfNotInCache) ->
 
 $.putResource = (domain, url, content_type, content) ->
   type = mapDomainToType(domain)
+  url = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
   contentDigest = null
   collection = null
   contentCollection = null
