@@ -30,6 +30,30 @@ All methods in alexandria return an `EventChannel`:
 * Index where resources are stored can be configured via `options` passed to `initialize`
 
 * For every domain whose resources are stored, two type mappings are created
-  * one type to store content type and the actual content in base64 encoding (id of documents of this type will be md5 digest of the content)
-  * another type to store url of the resource and a reference to the document that contains the actual content (id of documents of this type will be md5 digest of the url)
-  * the two types are named `<domain name with . replaced by _>__content__` and second type is named `<domain name with . replaced by _>`, example: a domain such as `example.com` would have the two types named `example_com__content__` and `example_com`.
+
+* One type to store content type and the actual content as either plain text (for text content) or base64 encoding (for binary content). Id of documents of this type will be md5 digest of the content.
+
+* Another type to store url of the resource and a reference to the document that contains the actual content. Id of documents of this type will be md5 digest of the url.
+
+* The two types are named `<domain_name_with_dot_replaced_with_underscore>_content` and second type is named `<domain_name_with_dot_replaced_with_underscore>`, example: a domain such as `example.com` would have the two types named `example_com_content` and `example_com`.
+
+* Following are example mappings (in cson format) of the two types that would be created for domain `example.com`:
+
+  * Mapping for type that stores the resource urls (content_ref field is md5 digest of the content itself)
+
+        ```
+        example_com:
+            properties:
+                url: type: "string"
+                content_ref: type: "string", index: "not_analyzed"
+        ```
+        
+  * Mapping for type that stores the content (text_content field contains plain text content if content type is text otherwise binary_content field stores binary content in base64 encoding)
+
+        ```
+        example_com_content
+            properties:
+                content_type: type: "string", index: "no"
+                text_content: type: "string"
+                binary_content: type: "binary"
+        ```
