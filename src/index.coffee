@@ -56,7 +56,8 @@ $.createStore = (domain) ->
       mapping["#{type}_content"] = 
         properties:
           content_type: type: "string", index: "no"
-          content: type: "binary"
+          text_content: type: "string"
+          binary_content: type: "binary"
       events.source (_events) ->
         adapter.client.putMapping(
           indexName
@@ -174,9 +175,9 @@ $.downloadResource = (url, attempt, callback) ->
     else
       encoding = res.headers["content-encoding"]
       encoding = encoding.toLowerCase() if encoding?
-      res.setEncoding("binary")
       contentType = res.headers["content-type"].toLowerCase()
       content = ""
+      res.setEncoding("binary")
       stream = res
       if encoding == "gzip"
         stream = res.pipe(zlib.createGunzip())
@@ -197,7 +198,7 @@ $.downloadResource = (url, attempt, callback) ->
     if attempt <= maxAttemptsOnDownloadError
       $.downloadResource(url, attempt + 1, callback)
     else
-      callback({contentType: null, content: null, statusCode: res.statusCode})
+      callback({contentType: null, content: null, statusCode: 999})
 
 $.isTextContent = (contentType) ->
   return contentType.indexOf("text/") == 0 or contentType.indexOf("application/javascript") == 0
