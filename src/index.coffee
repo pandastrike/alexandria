@@ -101,9 +101,9 @@ $.getAllResourceUrls = (domain) ->
 
 $.getResource = (domain, url, downloadIfNotInCache) ->
   type = mapDomainToType(domain)
-  url = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
   collection = contentCollection = null
-  urlDigest = md5(url)
+  urlDigest = md5(canonicalUrl)
   do events.serially (go) ->
     go ->
       do events.concurrently (go) ->
@@ -138,12 +138,12 @@ $.getResource = (domain, url, downloadIfNotInCache) ->
               contentCollection.put(contentDigest, {content_type: contentType, text_content: content})
             else
               contentCollection.put(contentDigest, {content_type: contentType, binary_content: content})
-            collection.put urlDigest, {url, content_ref: contentDigest}
+            collection.put urlDigest, {url: canonicalUrl, content_ref: contentDigest}
           return {contentType, content}
 
 $.putResource = (domain, url, contentType, content) ->
   type = mapDomainToType(domain)
-  url = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
   contentDigest = null
   collection = null
   contentCollection = null
@@ -162,11 +162,11 @@ $.putResource = (domain, url, contentType, content) ->
       else
         contentCollection.put(contentDigest, {content_type: contentType, binary_content: content})
     go ->
-      urlDigest = md5(url)
-      collection.put urlDigest, {url, content_ref: contentDigest}
+      urlDigest = md5(canonicalUrl)
+      collection.put urlDigest, {url: canonicalUrl, content_ref: contentDigest}
 
 $.downloadResource = (url, attempt, callback) ->
-  req = request {uri: url, maxRedirects: maxRedirectsForDownload}
+  req = request {uri: url, headers: {"User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:13.0) Gecko/20100101 Firefox/13.0.1"}, maxRedirects: maxRedirectsForDownload}
   req.on "response", (res) ->
     if res.statusCode >= 400
       callback({contentType: null, content: null, statusCode: res.statusCode})
