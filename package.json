@@ -23,10 +23,10 @@
   },
   "respository" : {
     "type": "git",
-    "url": "http://github.com/alexandria"
+    "url": "git://github.com/pandastrike/alexandria.git"
   },
   "keywords": [
-    "storage",
+    "cache",
     "crawler",
     "elasticsearch"
   ],
