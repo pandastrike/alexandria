@@ -41,7 +41,7 @@ run = () ->
       console.log "Putting resource into cache"
       # sleep for a second to give elasticsearch enough time to replicate
       sleep.sleep 1
-      # put a resource into cache, if not in cache download from the given url
+      # put a resource into cache
       alexandria.putResource(
         "http://example.com/test-resource.html"
         "text/html; charset=utf-8"
