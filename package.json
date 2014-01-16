@@ -4,9 +4,8 @@
   "description": "A storage interface to store crawled content in Elasticsearch",
   "main": "lib/index.js",
   "scripts": {
-    "prepublish": "coffee -o lib/ -c src/*.coffee && coffee -o test/ -c test/*.coffee && coffee -o example/ -c example/*.coffee",
-    "test": "coffee test/test.coffee",
-    "example": "coffee examples/wiki.coffee"
+    "prepublish": "coffee -o lib/ -c src/*.coffee",
+    "test": "coffee test/test.coffee"
   },
   "dependencies": {
     "fairmont": "~0.4.0",

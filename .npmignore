@@ -1,3 +1,3 @@
 src
-example/*.coffee
-test/*.coffee
+example
+test
