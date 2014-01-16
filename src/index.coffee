@@ -4,10 +4,12 @@ crypto = require "crypto"
 {merge, md5} = require "fairmont"
 request = require("request")
 zlib = require("zlib")
+URL = require("url")
 
 events = new EventChannel
 events.on "error", (err) ->
-  console.log "Oops! Failed ", err.stack
+  console.log "Oops! Failed ", err
+
 adapter = null
 
 indexName = "crawler_cache"
@@ -27,16 +29,141 @@ $.initialize = (options) ->
       adapter = _adapter
       _events.emit "success"
 
-$.createStore = (domain) ->
+$.createStore = () ->
+  events.source (_events) ->
+    adapter.client.createIndex(
+      indexName
+      (err, data) -> _events.callback err, data
+    )
+
+$.deleteStore = () ->
+  events.source (_events) ->
+    adapter.client.deleteIndex(
+      indexName
+      (err, data) -> _events.callback err, data
+    ) 
+
+$.getAllResourceUrls = (domain) ->
   type = mapDomainToType(domain)
   do events.serially (go) ->
+    go -> adapter.collection indexName, type
+    go (collection) ->
+      collection.all()
+    go (results) ->
+      if results?.length > 0
+        resourceUrls = results.map (result) -> result.url
+      else
+        resourceUrls = []
+
+$.getResource = (url, downloadIfNotInCache) ->
+  domain = getDomain(url)
+  type = mapDomainToType(domain)
+  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  collection = contentCollection = null
+  urlDigest = md5(canonicalUrl)
+  do events.serially (go) ->
     go ->
-      events.source (_events) ->
-        adapter.client.createIndex(
-          indexName
-          (err, data) -> 
-            _events.callback err, data
-        )
+      do events.concurrently (go) ->
+        go "_collection", -> adapter.collection indexName, type
+        go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
+    go ({_collection, _contentCollection}) ->
+      if _collection? and _contentCollection?
+        collection = _collection
+        contentCollection = _contentCollection
+        collection.get urlDigest
+    go (resource) ->
+      if resource?
+        contentCollection.get resource.content_ref
+    go (content) ->
+      if content?
+        if $.isContentText(content.content_type)
+          return {contentType: content.content_type, content: content.text_content}
+        else
+          return {contentType: content.content_type, content: content.binary_content}
+        
+      if !downloadIfNotInCache
+        return {contentType: null, content: null}
+
+      do events.serially (go) ->
+        go -> 
+          events.source (_events) ->
+            $.downloadResource url, 1, (result) ->
+              _events.emit "success", result
+        go ({contentType, content}) ->
+          if content?
+            do events.serially (go) ->
+              go -> $.putResource(url, contentType, content)
+              go -> return {contentType, content}
+          else
+            return {contentType, content}
+
+$.putResource = (url, contentType, content) ->
+  domain = getDomain(url)
+  type = mapDomainToType(domain)
+  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  contentDigest = null
+  collection = null
+  contentCollection = null
+  do events.serially (go) ->
+    go ->
+      putMapping(type)
+    go ->
+      do events.concurrently (go) ->
+        go "_collection", -> adapter.collection indexName, type
+        go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
+    go ({_collection, _contentCollection}) ->
+      collection = _collection
+      contentCollection = _contentCollection
+    go ->
+      contentDigest = md5(content)
+      if $.isContentText(contentType)
+        contentCollection.put(contentDigest, {content_type: contentType, text_content: content})
+      else
+        contentCollection.put(contentDigest, {content_type: contentType, binary_content: content})
+    go ->
+      urlDigest = md5(canonicalUrl)
+      collection.put urlDigest, {url: canonicalUrl, content_ref: contentDigest}
+
+$.downloadResource = (url, attempt, callback) ->
+  req = request {uri: url, headers: {"User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:13.0) Gecko/20100101 Firefox/13.0.1"}, maxRedirects: maxRedirectsForDownload}
+  req.on "response", (res) ->
+    if res.statusCode >= 400
+      callback({contentType: null, content: null, statusCode: res.statusCode})
+    else if res.statusCode >= 300 and res.statusCode < 400
+      $.downloadResource(res.headers.location, attempt, callback)
+    else
+      encoding = res.headers["content-encoding"]
+      encoding = encoding.toLowerCase() if encoding?
+      contentType = res.headers["content-type"].toLowerCase()
+      content = ""
+      res.setEncoding("binary")
+      stream = res
+      if encoding == "gzip"
+        stream = res.pipe(zlib.createGunzip())
+      else if encoding == "deflate"
+        stream = res.pipe(zlib.createInflate())
+      stream.on "data", (chunk) ->
+        content += chunk
+      stream.on "end", ->
+        content = new Buffer(content, "binary")
+        if $.isContentText(contentType)
+          content = content.toString()
+        else
+          content = content.toString("base64")
+        callback({contentType, content, statusCode: res.statusCode})
+      stream.on "error", (err) ->
+        callback({contentType: null, content: null, statusCode: res.statusCode})
+  req.on "error", (err) ->
+    if attempt <= maxAttemptsOnDownloadError
+      $.downloadResource(url, attempt + 1, callback)
+    else
+      callback({contentType: null, content: null, statusCode: 999})
+
+$.isContentText = (contentType) ->
+  return contentType.indexOf("text/") == 0 or contentType.indexOf("application/javascript") == 0
+
+putMapping = (type) -> 
+  do events.serially (go) ->
     go ->
       mapping = {}
       mapping[type] = 
@@ -67,143 +194,10 @@ $.createStore = (domain) ->
             _events.callback err, data
         )
 
-$.deleteStore = (domain) ->
-  type = mapDomainToType(domain)
-  do events.serially (go) ->
-    go ->
-      events.source (_events) ->
-        adapter.client.deleteMapping(
-          indexName
-          type
-          (err, data) -> 
-            _events.callback err, data
-        )
-    go ->
-      events.source (_events) ->
-        adapter.client.deleteMapping(
-          indexName
-          "#{type}_content"
-          (err, data) -> 
-            _events.callback err, data
-        )
-
-$.getAllResourceUrls = (domain) ->
-  type = mapDomainToType(domain)
-  do events.serially (go) ->
-    go -> adapter.collection indexName, type
-    go (collection) ->
-      collection.all()
-    go (results) ->
-      if results?.length > 0
-        resourceUrls = results.map (result) -> result.url
-      else
-        resourceUrls = []
-
-$.getResource = (domain, url, downloadIfNotInCache) ->
-  type = mapDomainToType(domain)
-  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
-  collection = contentCollection = null
-  urlDigest = md5(canonicalUrl)
-  do events.serially (go) ->
-    go ->
-      do events.concurrently (go) ->
-        go "_collection", -> adapter.collection indexName, type
-        go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
-    go ({_collection, _contentCollection}) ->
-      collection = _collection
-      contentCollection = _contentCollection
-      collection.get urlDigest
-    go (resource) ->
-      if resource?
-        contentCollection.get resource.content_ref
-    go (content) ->
-      if content?
-        if $.isTextContent(content.content_type)
-          return {contentType: content.content_type, content: content.text_content}
-        else
-          return {contentType: content.content_type, content: content.binary_content}
-        
-      if !downloadIfNotInCache
-        return {contentType: null, content: null}
-
-      do events.serially (go) ->
-        go -> 
-          events.source (_events) ->
-            $.downloadResource url, 1, (result) ->
-              _events.emit "success", result
-        go ({contentType, content}) ->
-          if content?
-            contentDigest = md5(content)
-            if $.isTextContent(contentType)
-              contentCollection.put(contentDigest, {content_type: contentType, text_content: content})
-            else
-              contentCollection.put(contentDigest, {content_type: contentType, binary_content: content})
-            collection.put urlDigest, {url: canonicalUrl, content_ref: contentDigest}
-          return {contentType, content}
-
-$.putResource = (domain, url, contentType, content) ->
-  type = mapDomainToType(domain)
-  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
-  contentDigest = null
-  collection = null
-  contentCollection = null
-  do events.serially (go) ->
-    go ->
-      do events.concurrently (go) ->
-        go "_collection", -> adapter.collection indexName, type
-        go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
-    go ({_collection, _contentCollection}) ->
-      collection = _collection
-      contentCollection = _contentCollection
-    go ->
-      contentDigest = md5(content)
-      if $.isTextContent(contentType)
-        contentCollection.put(contentDigest, {content_type: contentType, text_content: content})
-      else
-        contentCollection.put(contentDigest, {content_type: contentType, binary_content: content})
-    go ->
-      urlDigest = md5(canonicalUrl)
-      collection.put urlDigest, {url: canonicalUrl, content_ref: contentDigest}
-
-$.downloadResource = (url, attempt, callback) ->
-  req = request {uri: url, headers: {"User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:13.0) Gecko/20100101 Firefox/13.0.1"}, maxRedirects: maxRedirectsForDownload}
-  req.on "response", (res) ->
-    if res.statusCode >= 400
-      callback({contentType: null, content: null, statusCode: res.statusCode})
-    else if res.statusCode >= 300 and res.statusCode < 400
-      $.downloadResource(res.headers.location, attempt, callback)
-    else
-      encoding = res.headers["content-encoding"]
-      encoding = encoding.toLowerCase() if encoding?
-      contentType = res.headers["content-type"].toLowerCase()
-      content = ""
-      res.setEncoding("binary")
-      stream = res
-      if encoding == "gzip"
-        stream = res.pipe(zlib.createGunzip())
-      else if encoding == "deflate"
-        stream = res.pipe(zlib.createInflate())
-      stream.on "data", (chunk) ->
-        content += chunk
-      stream.on "end", ->
-        content = new Buffer(content, "binary")
-        if $.isTextContent(contentType)
-          content = content.toString()
-        else
-          content = content.toString("base64")
-        callback({contentType, content, statusCode: res.statusCode})
-      stream.on "error", (err) ->
-        callback({contentType: null, content: null, statusCode: res.statusCode})
-  req.on "error", (err) ->
-    if attempt <= maxAttemptsOnDownloadError
-      $.downloadResource(url, attempt + 1, callback)
-    else
-      callback({contentType: null, content: null, statusCode: 999})
-
-$.isTextContent = (contentType) ->
-  return contentType.indexOf("text/") == 0 or contentType.indexOf("application/javascript") == 0
-
 mapDomainToType = (domain) ->
   domain.replace(/\./g, "_")
+
+getDomain = (url) ->
+  URL.parse(url).hostname.split(".")[-2..].join(".")
 
 module.exports = $

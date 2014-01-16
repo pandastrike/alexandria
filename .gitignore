@@ -5,3 +5,6 @@ logs/
 *.log
 .DS_Store
 settings.*
+lib
+example/*.js
+test/*.js
