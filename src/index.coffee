@@ -106,14 +106,24 @@ $.putResource = (url, contentType, content) ->
   contentCollection = null
   do events.serially (go) ->
     go ->
-      putMapping(type)
-    go ->
       do events.concurrently (go) ->
         go "_collection", -> adapter.collection indexName, type
         go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
     go ({_collection, _contentCollection}) ->
-      collection = _collection
-      contentCollection = _contentCollection
+      if _collection? and _contentCollection?
+        collection = _collection
+        contentCollection = _contentCollection
+      else
+        do events.serially (go) ->
+          go -> 
+            putMapping(type)
+          go -> 
+            do events.concurrently (go) ->
+              go "_collection", -> adapter.collection indexName, type
+              go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
+          go ({_collection, _contentCollection}) ->
+            collection = _collection
+            contentCollection = _contentCollection
     go ->
       contentDigest = md5(content)
       if $.isContentText(contentType)
