@@ -55,8 +55,8 @@ $.getAllResourceUrls = (domain) ->
       else
         resourceUrls = []
 
-$.getResource = (url, downloadIfNotInCache) ->
-  domain = getDomain(url)
+$.getResource = (url, downloadIfNotInCache, domain) ->
+  domain = getDomain(url) if !domain?
   type = mapDomainToType(domain)
   canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
   collection = contentCollection = null
@@ -97,8 +97,8 @@ $.getResource = (url, downloadIfNotInCache) ->
           else
             return {contentType, content}
 
-$.putResource = (url, contentType, content) ->
-  domain = getDomain(url)
+$.putResource = (url, contentType, content, domain) ->
+  domain = getDomain(url) if !domain?
   type = mapDomainToType(domain)
   canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
   contentDigest = null
