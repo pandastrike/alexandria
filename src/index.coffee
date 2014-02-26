@@ -92,7 +92,7 @@ $.getResource = (url, downloadIfNotInCache, domain) ->
         go ({contentType, content}) ->
           if content?
             do events.serially (go) ->
-              go -> $.putResource(url, contentType, content)
+              go -> $.putResource(url, contentType, content, domain)
               go -> return {contentType, content}
           else
             return {contentType, content}
@@ -133,6 +133,31 @@ $.putResource = (url, contentType, content, domain) ->
     go ->
       urlDigest = md5(canonicalUrl)
       collection.put urlDigest, {url: canonicalUrl, content_ref: contentDigest}
+
+$.deleteResource = (url, domain) ->
+  domain = getDomain(url) if !domain?
+  type = mapDomainToType(domain)
+  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  collection = contentCollection = null
+  urlDigest = md5(canonicalUrl)
+  resource = null
+  do events.serially (go) ->
+    go ->
+      do events.concurrently (go) ->
+        go "_collection", -> adapter.collection indexName, type
+        go "_contentCollection", -> adapter.collection indexName, "#{type}_content"
+    go ({_collection, _contentCollection}) ->
+      if _collection? and _contentCollection?
+        collection = _collection
+        contentCollection = _contentCollection
+        collection.get urlDigest
+    go (_resource) ->
+      resource = _resource
+      if resource?
+        collection.delete urlDigest
+    go ->
+      if resource?
+        contentCollection.delete resource.content_ref
 
 $.downloadResource = (url, attempt, callback) ->
   req = request {uri: url, headers: {"User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:13.0) Gecko/20100101 Firefox/13.0.1"}, maxRedirects: maxRedirectsForDownload}
