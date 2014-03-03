@@ -1,6 +1,6 @@
 {
   "name": "alexandria",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A storage interface to store crawled content in Elasticsearch",
   "main": "lib/index.js",
   "scripts": {
