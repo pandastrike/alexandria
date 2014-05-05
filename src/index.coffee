@@ -15,6 +15,7 @@ adapter = null
 indexName = "crawler_cache"
 maxRedirectsForDownload = 1
 maxAttemptsOnDownloadError = 1
+userAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:13.0) Gecko/20100101 Firefox/13.0.1"
 
 $ = {}
 
@@ -23,6 +24,7 @@ $.initialize = (options) ->
     indexName = options.indexName if options.indexName?
     maxRedirectsForDownload = options.maxRedirectsForDownload if options.maxRedirectsForDownload?
     maxAttemptsOnDownloadError = options.maxAttemptsOnDownloadError if options.maxAttemptsOnDownloadError?
+    userAgent = options.userAgent if options.userAgent?
 
     _adapter = new ElasticSearch.Adapter(merge(options, events: events))
     _adapter.events.on "ready", (_adapter) ->
@@ -160,7 +162,7 @@ $.deleteResource = (url, domain) ->
         contentCollection.delete resource.content_ref
 
 $.downloadResource = (url, attempt, callback) ->
-  req = request {uri: url, headers: {"User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:13.0) Gecko/20100101 Firefox/13.0.1"}, maxRedirects: maxRedirectsForDownload}
+  req = request {uri: url, headers: {"User-Agent": userAgent}, maxRedirects: maxRedirectsForDownload}
   req.on "response", (res) ->
     if res.statusCode >= 400
       callback({contentType: null, content: null, statusCode: res.statusCode})
