@@ -96,3 +96,4 @@ run()
                 text_content: type: "string"
                 binary_content: type: "binary"
         ```
+
