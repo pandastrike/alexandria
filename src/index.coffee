@@ -162,7 +162,7 @@ $.deleteResource = (url, domain) ->
         contentCollection.delete resource.content_ref
 
 $.downloadResource = (url, attempt, callback) ->
-  req = request {uri: url, headers: {"User-Agent": userAgent}, maxRedirects: maxRedirectsForDownload}
+  req = request {uri: url, headers: {"User-Agent": userAgent, "Accept": "*/*", "Accept-Encoding": "gzip,deflate"}, maxRedirects: maxRedirectsForDownload}
   req.on "response", (res) ->
     if res.statusCode >= 400
       callback({contentType: null, content: null, statusCode: res.statusCode})
@@ -173,20 +173,23 @@ $.downloadResource = (url, attempt, callback) ->
       encoding = encoding.toLowerCase() if encoding?
       contentType = res.headers["content-type"].toLowerCase()
       content = ""
-      res.setEncoding("binary")
+      data = []
       stream = res
       if encoding == "gzip"
         stream = res.pipe(zlib.createGunzip())
       else if encoding == "deflate"
         stream = res.pipe(zlib.createInflate())
       stream.on "data", (chunk) ->
-        content += chunk
+        data.push(chunk)
       stream.on "end", ->
-        content = new Buffer(content, "binary")
+        data = data.reduce (prev, current) -> 
+            prev.concat(Array.prototype.slice.call(current))
+          , []
+        buffer = new Buffer(data)
         if $.isContentText(contentType)
-          content = content.toString()
+          content = buffer.toString()
         else
-          content = content.toString("base64")
+          content = buffer.toString("base64")
         callback({contentType, content, statusCode: res.statusCode})
       stream.on "error", (err) ->
         callback({contentType: null, content: null, statusCode: res.statusCode})
