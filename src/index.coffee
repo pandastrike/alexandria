@@ -60,7 +60,7 @@ $.getAllResourceUrls = (domain) ->
 $.getResource = (url, downloadIfNotInCache, domain) ->
   domain = getDomain(url) if !domain?
   type = mapDomainToType(domain)
-  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  canonicalUrl = getCanonicalUrl(url)
   collection = contentCollection = null
   urlDigest = md5(canonicalUrl)
   do events.serially (go) ->
@@ -102,7 +102,7 @@ $.getResource = (url, downloadIfNotInCache, domain) ->
 $.putResource = (url, contentType, content, domain) ->
   domain = getDomain(url) if !domain?
   type = mapDomainToType(domain)
-  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  canonicalUrl = getCanonicalUrl(url)
   contentDigest = null
   collection = null
   contentCollection = null
@@ -139,7 +139,7 @@ $.putResource = (url, contentType, content, domain) ->
 $.deleteResource = (url, domain) ->
   domain = getDomain(url) if !domain?
   type = mapDomainToType(domain)
-  canonicalUrl = url.replace(/(http(s)?:\/\/)?(www.)?/, "")
+  canonicalUrl = getCanonicalUrl(url)
   collection = contentCollection = null
   urlDigest = md5(canonicalUrl)
   resource = null
@@ -238,6 +238,9 @@ mapDomainToType = (domain) ->
   domain.replace(/\./g, "_")
 
 getDomain = (url) ->
-  URL.parse(url).hostname.split(".")[-2..].join(".")
+  URL.parse(url).hostname.replace(/(www[0-9]?\.)?/, "")
+
+getCanonicalUrl = (url) ->
+  url.replace(/(http(s)?:\/\/)?(www[0-9]?\.)?/, "")
 
 module.exports = $

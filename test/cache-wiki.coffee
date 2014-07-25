@@ -9,9 +9,9 @@ options =
     secure: false
     indexName: "test_crawler_cache"
   domains: [
-    "wikipedia.org"
-    "wikimedia.org"
-    "wikipedia.com"
+    "en.wikipedia.org"
+    "upload.wikimedia.org"
+    "en.wikipedia.com"
   ]
   resourcesToGet: [
     {url: "http://en.wikipedia.org/wiki/Main_Page", contentType: "text/html; charset=utf-8"}
