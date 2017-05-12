@@ -1,5 +1,7 @@
 # A content cache to store crawled content in Elasticsearch
 
+> **Important** This project is deprecated and unsupported.
+
 Alexandria provides a simple interface to store resources downloaded from the web. It uses Elasticsearch to index downloaded content.
 
 ## Example Usage
